@@ -80,8 +80,8 @@ nav{
 .nav-inner{display:flex;max-width:680px;margin:0 auto;}
 .nb{
   flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
-  padding:10px 4px calc(8px + env(safe-area-inset-bottom,0px)/3);
-  min-height:52px;
+  padding:13px 4px calc(14px + env(safe-area-inset-bottom,0px)/3);
+  min-height:60px;
   border:none;background:transparent;
   color:var(--t3);cursor:pointer;
   font-size:10px;font-weight:600;letter-spacing:.01em;
@@ -736,7 +736,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;heigh
         <div style="font-size:13px;font-weight:600;color:var(--t1);">Gute Voraussetzungen für intensiveres Training.</div>
         <div style="font-size:11px;color:var(--t3);margin-top:6px;">Knie heute: <b style="color:var(--blue);">7</b> <span style="color:var(--red);">↘</span> gestern: 8</div>
       </div><div style="font-size:12px;color:var(--t2);margin-top:10px;padding:8px 10px;background:var(--bg-subtle);border-radius:var(--r);font-style:italic;">"Fühlt sich gut an heute, Knie stabil"</div></div>
-      <button class="btn btn-ghost btn-sm" onclick="showTab('home')">Zum Dashboard</button>
+      <button class="btn btn-ghost btn-sm" onclick="showTab('home')" style="margin-top:24px;">Zum Dashboard</button>
     </div>
   </div>
   <div class="sec t-label">Verlauf</div>
@@ -1525,6 +1525,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;heigh
   <div class="sheet-title">Workout planen</div>
   <div class="sheet-sub" id="modal-plan-date-lbl"></div>
   <div class="f-group"><label>Workout</label><select id="plan-wk-sel"></select></div>
+  <div class="f-group">
+    <label>Uhrzeit</label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input id="plan-time-start" type="time" value="09:00" style="border:1px solid var(--border-md);border-radius:var(--r);padding:8px 12px;font-family:var(--font-mono);font-size:13px;background:var(--bg-subtle);color:var(--t1);outline:none;flex:1;">
+      <span style="font-size:12px;color:var(--t3);">bis</span>
+      <input id="plan-time-end" type="time" value="10:00" style="border:1px solid var(--border-md);border-radius:var(--r);padding:8px 12px;font-family:var(--font-mono);font-size:13px;background:var(--bg-subtle);color:var(--t1);outline:none;flex:1;">
+    </div>
+  </div>
   <div class="f-group"><label>Trainingsort</label>
     <select id="plan-loc-sel" onchange="onLocSel(this)">
       <option value="Activ Sursee">Activ Sursee</option>
@@ -1536,6 +1544,20 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;heigh
   </div>
   <div id="plan-loc-custom-wrap" style="display:none;">
     <div class="f-group"><label>Ort eingeben</label><input id="plan-loc-custom" placeholder="z.B. Outdoor"></div>
+  </div>
+  <div id="gcal-status-wrap" style="margin-bottom:14px;">
+    <div id="gcal-connected-banner" style="display:none;padding:10px 12px;background:var(--green-l);border:1px solid var(--green-b);border-radius:var(--r);display:flex;align-items:center;gap:8px;">
+      <span style="font-size:14px;">✅</span>
+      <div style="flex:1;">
+        <div style="font-size:12px;font-weight:600;color:var(--green);">Mit Google Calendar verbunden</div>
+        <div style="font-size:10px;color:var(--t3);">Trainings werden automatisch synchronisiert</div>
+      </div>
+      <button onclick="gcalDisconnect()" style="background:transparent;border:none;font-size:11px;color:var(--t3);cursor:pointer;text-decoration:underline;">Trennen</button>
+    </div>
+    <button id="gcal-connect-btn" onclick="gcalConnect()" style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;border:1px solid var(--border-md);border-radius:var(--r);background:var(--bg-card);cursor:pointer;font-size:13px;font-weight:600;color:var(--t2);">
+      <svg viewBox="0 0 24 24" style="width:18px;height:18px;flex-shrink:0;" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+      Mit Google Calendar verbinden
+    </button>
   </div>
   <div class="btn-row"><button class="btn btn-primary" onclick="savePlan()">Planen</button><button class="btn btn-ghost" onclick="closeModal('modal-plan')">Abbrechen</button></div>
 </div></div>
@@ -2055,13 +2077,42 @@ function renderCheckin(){
       <div class="ci-chip"><div class="ci-chip-val" style="color:var(--amber);">${todayCI.r}</div><div class="ci-chip-lbl">Bereitschaft</div></div>`;
     const fbEl=document.getElementById('ci-feedback-wrap');
     if(fbEl){
-      // Knie weighted 2x (most important for reha)
-      const score=(todayCI.e+todayCI.k*2+todayCI.r)/4;
-      let fb,fbColor;
-      if(todayCI.k<=3){fb='Knie stark belastet — heute nur leichte Mobilisation.';fbColor='var(--red)';}
-      else if(score>=7){fb='Gute Voraussetzungen für intensiveres Training.';fbColor='var(--green)';}
-      else if(score>=5){fb='Moderates Training empfohlen — auf Knie achten.';fbColor='var(--blue)';}
-      else{fb='Heute eher locker trainieren. Höre auf deinen Körper.';fbColor='var(--amber)';}
+      const e=todayCI.e, k=todayCI.k, r=todayCI.r;
+      // Dynamic recommendation engine based on combination of scores
+      let fb, fbColor, fbIcon, fbSub='';
+      if(k<=3){
+        fb='Knie stark belastet — nur leichte Mobilisation heute.';
+        fbSub='Narbe lockern, Einbeinstand, kein Druck auf das Knie.';
+        fbColor='var(--red)';fbIcon='🛑';
+      } else if(k<=5 && e>=7 && r>=7){
+        fb='Knie eingeschränkt, aber Energie ist da — Oberkörper-Tag!';
+        fbSub='Brust, Rücken, Schultern oder Arme trainieren. Kein Beinbelastung.';
+        fbColor='var(--blue)';fbIcon='💪';
+      } else if(k<=5 && e>=5){
+        fb='Knie schonend — Oberkörper oder leichtes Core-Training.';
+        fbSub='Vermeide Beinpresse und Kniebeugen heute.';
+        fbColor='var(--amber)';fbIcon='⚠️';
+      } else if(k>=8 && e>=8 && r>=8){
+        fb='Alle Werte top — intensiveres Training heute möglich!';
+        fbSub='Guter Tag für Progression: mehr Gewicht oder mehr Sets.';
+        fbColor='var(--green)';fbIcon='🔥';
+      } else if(k>=7 && e>=6 && r>=6){
+        fb='Gute Voraussetzungen — normales Training empfohlen.';
+        fbSub='Bleib bei deinem Plan, höre auf den Körper.';
+        fbColor='var(--green)';fbIcon='✅';
+      } else if(e<=3 && r<=4){
+        fb='Energie und Bereitschaft tief — Ruhetag oder Mobilisation.';
+        fbSub='Leichtes Dehnen oder Spaziergang reicht heute völlig.';
+        fbColor='var(--amber)';fbIcon='😴';
+      } else if(r<=4){
+        fb='Bereitschaft niedrig — lockeres Training, kein Druck.';
+        fbSub='Tägliche Übungen machen reicht für heute.';
+        fbColor='var(--amber)';fbIcon='🧘';
+      } else {
+        fb='Moderates Training empfohlen — auf Knie achten.';
+        fbSub='';
+        fbColor='var(--blue)';fbIcon='🏃';
+      }
       // Yesterday comparison
       const yest=new Date();yest.setDate(yest.getDate()-1);
       const yestCI=cis.find(c=>c.date===dk(yest));
@@ -2073,9 +2124,13 @@ function renderCheckin(){
         cmpHtml=`<div style="font-size:11px;color:var(--t3);margin-top:6px;">Knie heute: <b style="color:var(--blue);">${todayCI.k}</b> <span style="color:${col};">${arrow}</span> gestern: ${yestCI.k}</div>`;
       }
       const noteHtml=todayCI.note?`<div style="font-size:12px;color:var(--t2);margin-top:10px;padding:8px 10px;background:var(--bg-subtle);border-radius:var(--r);font-style:italic;">"${esc(todayCI.note)}"</div>`:'';
-      fbEl.innerHTML=`<div style="margin-top:12px;padding:12px 14px;border-radius:var(--r);background:var(--bg-subtle);border-left:3px solid ${fbColor};text-align:left;">
-        <div style="font-family:var(--font-mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Empfehlung heute</div>
-        <div style="font-size:13px;font-weight:600;color:var(--t1);">${fb}</div>
+      fbEl.innerHTML=`<div style="margin-top:12px;padding:14px 16px;border-radius:var(--rl);background:var(--bg-subtle);border-left:3px solid ${fbColor};text-align:left;">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px;">
+          <span style="font-size:18px;">${fbIcon}</span>
+          <div style="font-family:var(--font-mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;">Empfehlung heute</div>
+        </div>
+        <div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:${fbSub?'4px':'0'};">${fb}</div>
+        ${fbSub?`<div style="font-size:12px;color:var(--t2);line-height:1.5;">${fbSub}</div>`:''}
         ${cmpHtml}
       </div>${noteHtml}`;
     }
@@ -2252,7 +2307,7 @@ function renderDayPanel(dateStr){
     <div class="plan-item">
       <div class="plan-item-left">
         <div class="plan-item-wk">${esc(p.workoutTitle)}</div>
-        <div class="plan-item-loc">${esc(p.location||'—')}</div>
+        <div class="plan-item-loc">${p.timeStart?p.timeStart+' – '+p.timeEnd+' · ':''} ${esc(p.location||'—')}</div>
       </div>
       <div class="plan-item-actions">
         <button class="btn btn-primary btn-sm" onclick="startPlayer('${p.workoutId}')">Start →</button>
@@ -2260,6 +2315,89 @@ function renderDayPanel(dateStr){
       </div>
     </div>`).join('');
 }
+// ════════════════ GOOGLE CALENDAR INTEGRATION ════════════════
+const GCAL_CLIENT_ID='372468021786-kj5n4n5m5h1sespbbejdi4h388f8dgr6.apps.googleusercontent.com';
+const GCAL_REDIRECT_URI='https://andituer31.github.io/Comeback/index.html';
+const GCAL_SCOPE='https://www.googleapis.com/auth/calendar.events';
+let gcalToken=LS.g('cb_gcal_token')||null;
+let gcalTokenExpiry=LS.g('cb_gcal_expiry')||0;
+
+function gcalIsConnected(){return gcalToken&&Date.now()<gcalTokenExpiry;}
+function gcalUpdateUI(){
+  const connected=gcalIsConnected();
+  const banner=document.getElementById('gcal-connected-banner');
+  const btn=document.getElementById('gcal-connect-btn');
+  if(banner)banner.style.display=connected?'flex':'none';
+  if(btn)btn.style.display=connected?'none':'flex';
+}
+function gcalConnect(){
+  // OAuth2 implicit flow — opens Google login popup
+  const params=new URLSearchParams({
+    client_id:GCAL_CLIENT_ID,
+    redirect_uri:GCAL_REDIRECT_URI,
+    response_type:'token',
+    scope:GCAL_SCOPE,
+    prompt:'select_account',
+    state:'gcal_auth'
+  });
+  const authUrl='https://accounts.google.com/o/oauth2/v2/auth?'+params.toString();
+  const popup=window.open(authUrl,'gcal_auth','width=500,height=620,left=200,top=100');
+  // Listen for redirect back with token in URL hash
+  const check=setInterval(()=>{
+    try{
+      if(!popup||popup.closed){clearInterval(check);return;}
+      const hash=popup.location.hash;
+      if(hash&&hash.includes('access_token')){
+        clearInterval(check);popup.close();
+        const p=new URLSearchParams(hash.slice(1));
+        gcalToken=p.get('access_token');
+        const expiresIn=parseInt(p.get('expires_in')||3600)*1000;
+        gcalTokenExpiry=Date.now()+expiresIn;
+        LS.s('cb_gcal_token',gcalToken);
+        LS.s('cb_gcal_expiry',gcalTokenExpiry);
+        gcalUpdateUI();
+      }
+    }catch(e){/* cross-origin, keep waiting */}
+  },500);
+}
+function gcalDisconnect(){
+  gcalToken=null;gcalTokenExpiry=0;
+  LS.s('cb_gcal_token',null);LS.s('cb_gcal_expiry',0);
+  gcalUpdateUI();
+}
+async function gcalCreateEvent(dateStr,timeStart,timeEnd,title,location){
+  if(!gcalIsConnected())return;
+  const startDT=dateStr+'T'+timeStart+':00';
+  const endDT=dateStr+'T'+timeEnd+':00';
+  const body={
+    summary:'🏋️ '+title,
+    location:location||'',
+    description:'Comeback Reha App',
+    start:{dateTime:startDT,timeZone:'Europe/Zurich'},
+    end:{dateTime:endDT,timeZone:'Europe/Zurich'},
+    colorId:'2'
+  };
+  try{
+    const res=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+gcalToken,'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    if(res.ok){const ev=await res.json();return ev.id;}
+    else{console.warn('GCal error',await res.text());}
+  }catch(e){console.warn('GCal fetch error',e);}
+  return null;
+}
+async function gcalDeleteEvent(eventId){
+  if(!gcalIsConnected()||!eventId)return;
+  try{
+    await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events/'+eventId,{
+      method:'DELETE',
+      headers:{'Authorization':'Bearer '+gcalToken}
+    });
+  }catch(e){console.warn('GCal delete error',e);}
+}
+
 function openAddPlan(){
   if(!selectedCalDay){alert('Bitte zuerst einen Tag auswählen.');return;}
   const d=new Date(selectedCalDay+'T12:00:00');
@@ -2268,20 +2406,31 @@ function openAddPlan(){
   sel.innerHTML=workouts.map(w=>`<option value="${w.id}">${esc(w.title)}</option>`).join('');
   document.getElementById('plan-loc-sel').value='Activ Sursee';
   document.getElementById('plan-loc-custom-wrap').style.display='none';
+  gcalUpdateUI();
   openModal('modal-plan');
 }
 function onLocSel(el){document.getElementById('plan-loc-custom-wrap').style.display=el.value==='custom'?'block':'none';}
-function savePlan(){
+async function savePlan(){
   const wkId=document.getElementById('plan-wk-sel').value;
   const wk=workouts.find(w=>w.id===wkId);
   const locSel=document.getElementById('plan-loc-sel').value;
   const loc=locSel==='custom'?document.getElementById('plan-loc-custom').value.trim():locSel;
+  const timeStart=document.getElementById('plan-time-start').value||'09:00';
+  const timeEnd=document.getElementById('plan-time-end').value||'10:00';
   if(!plans[selectedCalDay])plans[selectedCalDay]=[];
-  plans[selectedCalDay].push({workoutId:wkId,workoutTitle:wk.title,location:loc});
+  const planEntry={workoutId:wkId,workoutTitle:wk.title,location:loc,timeStart,timeEnd};
+  // Sync to Google Calendar if connected
+  if(gcalIsConnected()){
+    const evId=await gcalCreateEvent(selectedCalDay,timeStart,timeEnd,wk.title,loc);
+    if(evId)planEntry.gcalEventId=evId;
+  }
+  plans[selectedCalDay].push(planEntry);
   savePlans();closeModal('modal-plan');renderDayPanel(selectedCalDay);renderCalendar();
 }
 function deletePlan(dateStr,idx){
   confirm_('Plan löschen?','Diesen Eintrag entfernen.',()=>{
+    const entry=plans[dateStr][idx];
+    if(entry&&entry.gcalEventId)gcalDeleteEvent(entry.gcalEventId);
     plans[dateStr].splice(idx,1);if(!plans[dateStr].length)delete plans[dateStr];
     savePlans();renderDayPanel(dateStr);renderCalendar();
   });
@@ -3209,7 +3358,7 @@ function importData(input){
 })();
 
 // ════════════════ INIT ════════════════
-renderHome();renderWorkouts();initSliders();
+showTab('home');renderWorkouts();initSliders();
 // Stats panels rendered lazily on first tab open
 selectedCalDay=dk();
 </script>
